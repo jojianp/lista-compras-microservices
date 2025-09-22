@@ -221,29 +221,43 @@ app.get('/api/search', async (req, res) => {
     });
     const itensEncontrados = respostaItens.data;
 
-    const servicoListas = registry.discover('list-service');
-    const respostaListas = await axios.get(`${servicoListas.url}/lists`, {
-      timeout: 5000,
-      headers: req.headers
-    }).catch(() => ({ data: [] }));
-    const todasListas = respostaListas.data;
+    let listasEncontradas = [];
+    try {
+      const servicoListas = registry.discover('list-service');
+      const respostaListas = await axios.get(`${servicoListas.url}/lists`, {
+        timeout: 5000,
+        headers: req.headers 
+      });
+      listasEncontradas = respostaListas.data || [];
+    } catch {
+      listasEncontradas = [];
+    }
 
-    const listasFiltradas = todasListas.filter(list =>
-      list.name.toLowerCase().includes(consulta) || 
-      list.items?.some(item => item.itemName.toLowerCase().includes(consulta))
-    );
+    const listasFiltradas = listasEncontradas
+      .map(list => {
+        const matchNome = list.name.toLowerCase().includes(consulta);
 
-    const listasMapeadas = listasFiltradas.map(list => ({
-      ...list,
-      items: list.items?.filter(item => item.itemName.toLowerCase().includes(consulta)) || []
-    }));
+        const itensFiltrados = (list.items || []).filter(item =>
+          item.itemName.toLowerCase().includes(consulta)
+        );
+
+        if (matchNome || itensFiltrados.length > 0) {
+          return {
+            ...list,
+            items: itensFiltrados
+          };
+        }
+        return null;
+      })
+      .filter(l => l !== null);
 
     res.json({
       items: itensEncontrados,
-      lists: listasMapeadas
+      lists: listasFiltradas
     });
 
   } catch (erro) {
+    console.error('❌ Erro no /api/search:', erro.message);
     res.status(500).json({ erro: 'erro_interno', detalhe: erro.message });
   }
 });
